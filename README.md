@@ -23,9 +23,19 @@ The name of the results file is always the same name as the input file.
 
 ![Overview of all output files](/readme_figures/overview.png)
 
+### Table columns
+- `x` and `y`: position of detected particles
+- `size`: nb pixels belonging to nucleus
+- `frame`: timestep of timelapse movie
+- `mean_nuc_c1` / `_c2` and `mean_ring_c1` / `_c2`: mean pixel intensities of extracted nuclei and cytosolic rings. Used to calculate ratios. `c1` and `c2` stand for the channel numbers.
+- `ratio_c1 / c2` the  ratio of `mean_nuc` over `mean_ring`
+- `particle`: collumn gets added by the tracking library `trackpy` and is the global particla label assigned by trackpy. Continuous between frames if nucleus is linked.
+- `label_frame`: the label initially given to each nucleus after a first segmentation. not continuous between frames!
+- `p_nucleus`: mean class confidence of all pixels belonging to the nucleus
+
 The pipeline is modular, steps can replaced (e.g instead of using the classifier from the pipeline, import nuclei probability maps created with illastik)
 
-### How to run a jupyter notebook on the cluster
+### Run a jupyter notebook on the cluster
 To start your own jupyter notebook server, first allocate ressources trough slurm:
 
     `salloc --mem 250GB -w izbdelhi --time 12:00:00 --cpus-per-task=50`
