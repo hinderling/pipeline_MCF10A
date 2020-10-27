@@ -29,7 +29,7 @@ The name of the results file is always the same name as the input file.
 - `frame`: timestep of timelapse movie
 - `mean_nuc_c1` / `_c2` and `mean_ring_c1` / `_c2`: mean pixel intensities of extracted nuclei and cytosolic rings. Used to calculate ratios. `c1` and `c2` stand for the channel numbers.
 - `ratio_c1 / c2` the  ratio of `mean_nuc` over `mean_ring`
-- `particle`: collumn gets added by the tracking library `trackpy` and is the global particla label assigned by trackpy. Continuous between frames if nucleus is linked.
+- `particle`: collumn gets added by the tracking library `trackpy` and is the global particle label assigned by trackpy. Continuous between frames if nucleus is linked.
 - `label_frame`: the label initially given to each nucleus after a first segmentation. not continuous between frames!
 - `p_nucleus`: mean class confidence of all pixels belonging to the nucleus
 
