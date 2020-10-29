@@ -6,13 +6,15 @@ from skimage.color import label2rgb
 from scipy.ndimage.morphology import binary_fill_holes, binary_erosion
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed, expand_labels
+from skimage.morphology import remove_small_objects
 import numpy as np
 import multiprocessing
 import time
+import gc
 
 def watershed_edt(background_mask):
     # fill holes
-    background_mask = binary_fill_holes(background_mask)
+   # background_mask = binary_fill_holes(background_mask)
 
     # calculate euclidean distance transform 
     distance = ndi.distance_transform_edt(background_mask)
@@ -64,7 +66,7 @@ def recursion(binary_mask, binary_mask_selected, labels, erosion_iteration, min_
     if erosion_iteration == 0:
         binary_mask_eroded = binary_mask_selected
     else:
-        binary_mask_eroded = binary_erosion(binary_mask_selected,iterations=erosion_iteration)
+        binary_mask_eroded = binary_erosion(binary_mask_selected,iterations=erosion_iteration*3)
         
 
     #do watershed
@@ -83,7 +85,7 @@ def recursion(binary_mask, binary_mask_selected, labels, erosion_iteration, min_
     for u,c in zip(unique,counts):
         if c < min_size:
             #to small? return labels from binary_mask
-            # do nothin
+            # do nothing
             continue
         if (c >= min_size and c < max_size):
             #ok size? return labels from binary_mask_erosion
@@ -91,7 +93,7 @@ def recursion(binary_mask, binary_mask_selected, labels, erosion_iteration, min_
             labels[labels_eroded==u] = np.max(labels)+1
         else:
             #to large? recursion(binary_mask, erosion+1)
-            if erosion_iteration == 15: #increase this value to try to segment even further
+            if erosion_iteration == 5: #increase this value to try to segment even further
                 labels[labels_eroded==u] = np.max(labels)+1
             #extract just that blob
             else:
@@ -100,35 +102,69 @@ def recursion(binary_mask, binary_mask_selected, labels, erosion_iteration, min_
     return labels
 
 
-def apply_recursion(args):#, raw_stack):
-    chunk_path, min_size, max_size = args[0],args[1],args[2]
+def apply_recursion(args):
+    #read in arguments
+    chunk_path, min_size, min_size_expected, max_size_expected = args[0],args[1],args[2],args[3]
+    #load in stack chunk
     segmentation_stack = np.load(chunk_path)
     completed_frames = []
     for frame_nb in range(np.shape(segmentation_stack)[0]):
         mask_f = segmentation_stack[frame_nb,:,:]
      
-        #preprocess
+        #create  binary mask of nuclei
         mask_binary_f = mask_f<(255/2)
+        
+        #remove objects smaller than minsize
+        remove_small_objects(mask_binary_f, min_size=min_size,in_place =True)
+        #fill holes
         mask_binary_f = binary_fill_holes(mask_binary_f)
-        labels,distance = watershed_edt(mask_binary_f)
+        
+        #create initial labels
+        #labels,distance = watershed_edt(mask_binary_f)
+        distance = ndi.distance_transform_edt(mask_binary_f)
         labels = np.zeros_like(mask_binary_f, dtype = np.uint16)
 
         #process
-        labels = recursion(mask_binary_f, mask_binary_f, labels, 0, min_size, max_size)
+        labels = recursion(mask_binary_f, mask_binary_f, labels, 0, min_size_expected, max_size_expected)
+        labels = watershed(image = distance, markers = labels, mask=mask_binary_f)       
+
+        #recover all unsplittable large nuclei larger than max_size_expected
+        max_label = np.max(labels)
+        unlabeled_area = np.logical_and(labels == 0,mask_binary_f)
+        labels_large_nuc, _ = watershed_edt(unlabeled_area)
+        labels_large_nuc = labels_large_nuc.flatten()
+        large_nuc_inds = np.where(labels_large_nuc != 0)
+        labels_large_nuc = labels_large_nuc+max_label
         
-        #postprocess
-        labels = watershed(image = distance, markers = labels, mask=mask_binary_f )
+        #https://stackoverflow.com/a/47100703/13557501
+        labels = labels.flatten() 
+        np.put(labels,large_nuc_inds,labels_large_nuc[large_nuc_inds])
+        labels = labels.reshape((1024,1024))       
+        
         completed_frames.append(labels)
+        
+        _ = []        
+        mask_f = []
+        mask_binary_f = []
+        labels = []
+        distance = []
+        labels_large_nuc = []
+        unlabeled_area = []
+        labels = []
+        
+        gc.collect()
+
+        
     completed_frames = np.array(completed_frames)    
     return completed_frames
 
 
-def apply_instance_segmentation(chunk_paths, min_size, max_size):
+def apply_instance_segmentation(chunk_paths, min_size, min_size_expected, max_size_expected):
     arg_stack = []
     pool = multiprocessing.Pool(processes= len(chunk_paths))
     time_start = time.time()
     for chunk_path in chunk_paths:
-        arg_stack.append([chunk_path,min_size,max_size])
+        arg_stack.append([chunk_path,min_size,min_size_expected,max_size_expected])
 
     print("Start workers ...")
     results = pool.imap(apply_recursion, arg_stack, chunksize = 1)
@@ -185,7 +221,6 @@ def apply_instance_segmentation_old(segmented_stack_path, max_size, min_size,nb_
     time_stop = time.time()
     time_total =  time_stop - time_start
     print("Done. Processing time per frame: "+str(time_total/nb_frames)+" seconds. Total time: "+str(time_total/60)+" minutes.")
-
 
 
     # Extract the results from the iterator object and store as tiff file.
