@@ -20,9 +20,25 @@ import pickle
 from scipy import ndimage as nd
 from skimage import exposure
 from skimage import io
+import gc
 
-def fd_VGG16(img):
+def fd_VGG16(img,model):
+    input_image_stacked = np.expand_dims(img, axis=-1) 
                #model preparation
+    
+    #new_model.summary()
+    #as it works only with 3 input channels: stack nuclear channel
+    stacked_img = np.stack((img,)*3, axis=2)
+    stacked_img = np.squeeze(stacked_img)
+    stacked_img = stacked_img.astype(np.float32)
+    stacked_img = stacked_img.reshape(-1, 1024, 1024, 3)
+    
+    features=model.predict(stacked_img)
+    
+    fv_VGG16= np.squeeze(features)
+    return fv_VGG16
+
+def init_VGG16():
     VGG_model = VGG16(weights='imagenet', include_top=False, input_shape=(1024, 1024, 3))
 
     #diable training (use pretrained weights)
@@ -32,24 +48,9 @@ def fd_VGG16(img):
 
     #only use up to last layer where input size is still 1024x1024
     new_model = Model(inputs=VGG_model.input, outputs=VGG_model.get_layer('block1_conv2').output)
-    #new_model.summary()
-    #as it works only with 3 input channels: stack nuclear channel
-    stacked_img = np.stack((img,)*3, axis=2)
-    stacked_img = np.squeeze(stacked_img)
-    stacked_img = stacked_img.astype(np.float32)
-    stacked_img = stacked_img.reshape(-1, 1024, 1024, 3)
-    
-    features=new_model.predict(stacked_img)
-    return features
+    VGG_model = []
+    return new_model
 
-def extract_features_VGG16(input_image):
-    #extract features from an image, and stack them
-    input_image_stacked = np.expand_dims(input_image, axis=-1)    
-    fv_VGG16 = fd_VGG16(input_image_stacked)
-    
-    fv_VGG16= np.squeeze(fv_VGG16)
-    
-    return fv_VGG16
 
 #https://github.com/87surendra/Random-Forest-Image-Classification-using-Python/blob/master/Random-Forest-Image-Classification-using-Python.ipynb
 #https://github.com/bnsreenu/python_for_microscopists/blob/master/062-066-ML_06_04_TRAIN_ML_segmentation_All_filters_RForest.py
@@ -144,14 +145,14 @@ def annotations_to_tensor(feature_matrix,mask):
     X_features = np.asarray(X_features)
     return X_features,y_labels
 
-def extract_features(input_image):
+def extract_features(input_image,model_VGG16):
     #extract features from an image, and stack them
     pixel_value = np.expand_dims(input_image, axis=2)
     fv_blur = fd_blur(input_image)
     fv_gabor = fd_gabor(input_image)
     fv_filter_collection = fd_filter_collection(input_image)
     fv_filter_collection = np.squeeze(fv_filter_collection)
-    fv_VGG16 = extract_features_VGG16(input_image)
+    fv_VGG16 = fd_VGG16(input_image, model_VGG16)
     global_feature = np.concatenate([pixel_value, fv_blur,fv_gabor,fv_filter_collection,fv_VGG16],axis=2)
     
     #scaler = MinMaxScaler(feature_range=(0, 1))
@@ -164,13 +165,21 @@ def apply_clf(args):
     path, clf = args[0],args[1]
     frames = np.load(path)
     output_stack = []
+    model_VGG16 = init_VGG16()
     for frame_nb in (range(np.shape(frames)[0])):
         frame = frames[frame_nb,:,:]
-        feature_image = extract_features(frame)
+        feature_image = extract_features(frame,model_VGG16)
         feature_vector = feature_image.reshape(np.shape(feature_image)[0]*np.shape(feature_image)[1],np.shape(feature_image)[2])
         prediction_vector = clf.predict_proba(feature_vector)[:,0] #[:,] to only use the prob. of the first class
         prediction_image = np.reshape(prediction_vector, (1024, 1024))
         output_stack.append(prediction_image)
+        
+        feature_image = []
+        feature_vector = []
+        prediction_vector = []
+        prediction_image = []
+        gc.collect()
+        
     output_stack = np.array(output_stack)
     output = output_stack*255
     output = output.astype('uint8')
@@ -232,6 +241,8 @@ def interface(input_image, classifier, alpha):
     img8 = img8.astype('uint8')
     img8 = np.stack((img8,)*3, axis=-1)
 
+   
+    
     def draw_circle(event,x,y,flags,param):
         if event == cv2.EVENT_LBUTTONDOWN:
             drawing = True
@@ -253,7 +264,8 @@ def interface(input_image, classifier, alpha):
     dest = np.empty(np.shape(background),np.uint8)
     dest = dest.astype('uint8')
     update = False
-    features = extract_features(input_image)
+    model_VGG16 = init_VGG16()
+    features = extract_features(input_image,model_VGG16)
     reuse_mask = False
     if reuse_mask:
         no_mask_initialized = False
