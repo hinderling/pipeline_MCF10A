@@ -55,4 +55,4 @@ Make sure that you copy the whole link (including the token), and that the nodes
 A more complete explanation can be found on the [lab wiki](http://pertzlab.unibe.ch/doku.php?id=wiki:other_software). 
 
 ### Dependencies
-`tensorflow`,`anytree`,`tqdm`,`trackpy`
+`tensorflow`,`anytree`,`tqdm`,`trackpy`, `blend-modes`
