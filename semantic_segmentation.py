@@ -1,3 +1,4 @@
+import blend_modes
 import cv2
 import gc
 import glob
@@ -8,6 +9,7 @@ import os
 import pickle
 import tensorflow as tf
 import time
+from collections import deque
 from scipy import ndimage as nd
 from skimage import exposure
 from skimage import io
@@ -46,7 +48,7 @@ def apply_clf(args):
     output_stack = []
     
     
-    shapes = [(1024,1024),(512,512),(256,256)]
+    shapes = [(1024,1024),(512,512),(256,256),(128,128)]
     models = init_VGG16_pyramid(shapes)
     
     for frame_nb in (range(np.shape(frames)[0])):
@@ -166,45 +168,114 @@ def init_VGG16_pyramid(input_shapes=[(1024, 1024)]):
     return models
 
 
-def interface(input_image, classifier, alpha,mask = None):
+
+def render_output(show_annotations, show_prediction, blending_function, blending_alpha, background_img, prediction_img, annotations):
+
+    
+    if prediction_img == [] or not show_prediction:
+        output_img = background_img
+    else:
+        dummy_alpha = np.full_like(prediction_img,255)
+        dummy_alpha = np.expand_dims(dummy_alpha, axis = -1)
+
+        #convert p-map from [0-1] to cmap 
+        prediction_img = (prediction_img*255).astype('uint8')
+        prediction_img = cv2.applyColorMap(prediction_img, cv2.COLORMAP_JET)
+        background_img = background_img.astype(float)
+        prediction_img = prediction_img.astype(float)
+        background_img = np.concatenate((background_img, dummy_alpha),  axis = -1)
+        prediction_img = np.concatenate((prediction_img, dummy_alpha),  axis = -1)
+
+        #blend the bg image and prediction img
+        output_img = blending_function(background_img,prediction_img,blending_alpha)
+        output_img = np.uint8(output_img)
+        output_img = output_img[:,:,0:3] #remove alpha channel 
+            
+        
+    #add annotations
+    if show_annotations:
+        col_bg = [255,100,100] #color for background annotations
+        col_fg = [100,255,100] #color for foreground annotations
+        is_bg = np.where(annotations == 0)
+        is_fg = np.where(annotations == 1)
+        #https://www.pythonlikeyoumeanit.com/Module3_IntroducingNumpy/AccessingDataAlongMultipleDimensions.html#Supplying-Fewer-Indices-Than-Dimensions
+        output_img[is_bg]=col_bg
+        output_img[is_fg]=col_fg
+        
+    cv2.imshow('image',output_img)
+    return output_img
+
+
+def interface(input_img, classifier, alpha,mask = None):
     drawing = False # true if mouse is pressed
-    ix,iy = -1,-1
     mode = True
     cv2.destroyAllWindows() #close any windows left 
-    #convert 16bit-1channel input image into grayscale uint8 3channel image
-    #rescale the intensity so we can see more
     
-    p2, p98 = np.percentile(input_image, (2, 98))
-    img8 = exposure.rescale_intensity(input_image, in_range=(p2, p98))
+    #convert 16bit-1channel input image into grayscale uint8 3channel image
+    ## rescale the intensity so we can see more
+    p2, p98 = np.percentile(input_img, (2, 98))
+    img8 = exposure.rescale_intensity(input_img, in_range=(p2, p98))
     scaler = MinMaxScaler(feature_range=(0, 255))
     scaler.fit(img8)
     img8 = scaler.transform(img8)
     img8 = np.round(img8)
     img8 = img8.astype('uint8')
-    img8 = np.stack((img8,)*3, axis=-1)
-
+    background = np.stack((img8,)*3, axis=-1)
+    prediction_img = [] #init as empty
     
     shapes = [(1024,1024),(512,512),(256,256)]
     models = init_VGG16_pyramid(shapes)
-    features = fd_VGG16_pyramid(input_image,models,shapes)
+    features = fd_VGG16_pyramid(input_img,models,shapes)
     
     radius = 2
+    
+    #blend_mode_names = ['soft_light','lighten_only','dodge','addition','darken_only','multiply','hard_light','difference','subtract','grain_extract','grain_merge','divide','overlay','normal'] 
+    #blend_mode_names =['soft_light','lighten_only','dodge','multiply','hard_light','grain_extract','grain_merge','overlay','normal'] 
+    blend_mode_names =['soft_light','lighten_only',b'multiply','grain_extract','overlay','normal'] 
+    
+    blend_mode_selected = 0git
+    blending_function = getattr(blend_modes, blend_mode_names[blend_mode_selected])
+    blending_alpha = 0.5
+    show_annotations = True
+    show_prediction = True
+    
+    #empty annotation_layer
+    annotation_stack_max = 100 #max number of undo steps
+    annotation_empty = np.zeros(np.shape(background)[:2])
+    annotation_empty.fill(np.nan)
+    
+    #init stack for undo functionality
+    annotation_stack = deque()
+    annotation_stack.append(annotation_empty)
+    
+    #init 
+    
     
     print(features.shape)
     def draw_circle(event,x,y,flags,param):
         if event == cv2.EVENT_LBUTTONDOWN:
             drawing = True
-            ix,iy = x,y
-            if mode == True:
-                cv2.circle(output,(x,y),radius,(255,100,100),-1)
-                cv2.circle(mask_one_channel,(x,y),radius,(0))
+            if mode == True:                
+                #cv2.circle(output,(x,y),radius,(255,100,100),-1)
+                
+                #get last annotation and update it, append it to stack
+                annotation_last = annotation_stack[-1].copy() #peek at rightmost item                  
+                cv2.circle(annotation_last,(x,y),radius,(0),-1)
+                annotation_stack.append(annotation_last)
             else:
-                cv2.circle(output,(x,y),radius,(100,255,100),-1)
-                cv2.circle(mask_one_channel,(x,y),radius,(1))
+                #cv2.circle(output,(x,y),radius,(100,255,100),-1)
+                annotation_last = annotation_stack[-1].copy()     
+                cv2.circle(annotation_last,(x,y),radius,(1),-1)
+                annotation_stack.append(annotation_last)
+                
+            #if max number of undo steps reached, delete oldest step
+            if len(annotation_stack) == annotation_stack_max:
+                annotation_stack.popleft()
+        
         elif event == cv2.EVENT_LBUTTONUP:
             drawing = False
 
-    background = img8
+    
     cv2.namedWindow('image')
     cv2.setMouseCallback('image',draw_circle)
     cv2.imshow('image',background)
@@ -214,10 +285,7 @@ def interface(input_image, classifier, alpha,mask = None):
     update = False
     
     
-    shape = (1024,1024)
-    #model_VGG16 = init_VGG16_scaled(shape)
-    #features = extract_features(input_image,model_VGG16)
-    #features = fd_VGG16_scaled(input_image,model_VGG16,shape)
+    ## TODO replace this with previous features/annotations instead of a previous mask
     if type(mask) != type(None):
         no_mask_initialized = False
         mask_one_channel = mask
@@ -230,53 +298,84 @@ def interface(input_image, classifier, alpha,mask = None):
         output = background.copy()
         
 
-    no_prediction_initialized = True    
+    no_prediction_initialized = True
     
-    print('\r' + 'Click to label [BACKGROUND]', end='')
+    ## MAIN LOOP ##
     while(1):
-        mask3 =  np.stack((mask_one_channel,)*3, axis=-1)
-        mask3_isnan = np.isnan(mask3)
+        
+        annotations = annotation_stack[-1] #peek at latest annotation
 
+        ## Update Classifier
         if update:
             print('\r' + '[TRAINING CLASSIFIER]          ', end='')
-            X,y = annotations_to_tensor(features,mask_one_channel)
-            clf = classifier
-            clf.fit(X, y)
+            
+            # extract the annotated pixels
+            X,y = annotations_to_tensor(features,annotations)
+            classifier.fit(X, y)
             to_predict = features.reshape(np.shape(features)[0]*np.shape(features)[1],np.shape(features)[2])
-            predicted = clf.predict_proba(to_predict)[:,0] #use [:,0] if displaying probab.    
-            predicted = np.reshape(predicted, (1024, 1024))
-            predicted = (predicted*255).astype('uint8')
-            prediction3 = cv2.applyColorMap(predicted, cv2.COLORMAP_JET)
+            prediction_list = classifier.predict_proba(to_predict)[:,0] #use [:,0] if displaying probab. 
+            prediction_img = np.reshape(prediction_list, (1024, 1024))
             update = False
 
+
             no_prediction_initialized = False
-        if no_prediction_initialized == True:
-            cv2.imshow('image',output)
+       #if no_prediction_initialized == True:
+       #     cv2.imshow('image',output)
+       # else: 
+       #     cv2.addWeighted(output, alpha, prediction3, 1 - alpha,0, dest)
+       #     cv2.imshow('image',dest)
+       
+          
+        if mode:
+            print('\r' + 'Click to label [BACKGROUND]', end='')
         else: 
-            cv2.addWeighted(output, alpha, prediction3, 1 - alpha,0, dest)
-            cv2.imshow('image',dest)
-            if mode:
-                print('\r' + 'Click to label [BACKGROUND]', end='')
-            else: 
-                print('\r' + 'Click to label [  NUCLEI  ]', end='')
+            print('\r' + 'Click to label [  NUCLEI  ]', end='')
+                
+        ## update the output display
+        render_output(show_annotations, show_prediction, blending_function, blending_alpha, background.copy(), prediction_img, annotations)
+        
                 
         k = cv2.waitKey(1) & 0xFF
         
+        
+        ## KEY BINDINGS
         if k == ord('m'):
             mode = not mode
             if mode:
                 print('\r' + 'Click to label [BACKGROUND]', end='')
             else: 
                 print('\r' + 'Click to label [  NUCLEI  ]', end='')
+                
         elif k == ord('q'):
             break
+            
         elif k == ord('u'):
             update = True   
+            
         elif k in list(map(ord,list(map(str,range(0,10))))):
             #change radius of pen to number key clicked
-            radius = int(chr(k))      
+            radius = int(chr(k))    
             
-
+        elif k == ord('z'):
+            #undo function: if more than 1 elem left, go back
+            if len(annotation_stack) > 1:
+                annotation_stack.pop()
+        
+        if k == ord('a'):
+            #show / hide annotations
+            show_annotations = not show_annotations
+            
+        if k == ord('p'):
+            #show / hide annotations
+            show_prediction = not show_prediction
+        
+        elif k == ord('b'):
+            #change blend mode
+            blend_mode_selected = (blend_mode_selected + 1) % len(blend_mode_names)
+            blending_function = getattr(blend_modes, blend_mode_names[blend_mode_selected])
+            print('New blendmode:'+blend_mode_names[blend_mode_selected-1])
+            print()
+            
     cv2.destroyAllWindows()
     labels = mask_one_channel 
-    return clf, mask_one_channel, output, background, prediction3 #return classifier and manual annotations
+    return classifier, mask_one_channel, output, background #return classifier and manual annotations
