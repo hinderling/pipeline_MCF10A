@@ -53,3 +53,6 @@ Next copy the link into your browser, change the port number and you will have a
 Make sure that you copy the whole link (including the token), and that the nodes match between `salloc` and the port forward.
 
 A more complete explanation can be found on the [lab wiki](http://pertzlab.unibe.ch/doku.php?id=wiki:other_software). 
+
+### Dependencies
+`tensorflow`,`anytree`,`tqdm`,`trackpy`, `blend-modes`
