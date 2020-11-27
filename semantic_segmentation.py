@@ -206,7 +206,7 @@ def render_output(show_annotations, show_prediction, blending_function, blending
     return output_img
 
 
-def interface(input_img, classifier, alpha,mask = None):
+def interface(input_img, classifier, blending_alpha = 0.5, mask = None):
     drawing = False # true if mouse is pressed
     mode = True
     cv2.destroyAllWindows() #close any windows left 
@@ -229,13 +229,15 @@ def interface(input_img, classifier, alpha,mask = None):
     
     radius = 2
     
+    #all available blendmodes
     #blend_mode_names = ['soft_light','lighten_only','dodge','addition','darken_only','multiply','hard_light','difference','subtract','grain_extract','grain_merge','divide','overlay','normal'] 
-    #blend_mode_names =['soft_light','lighten_only','dodge','multiply','hard_light','grain_extract','grain_merge','overlay','normal'] 
+    
+    #possibly useful blendmodes:
     blend_mode_names =['soft_light','lighten_only',b'multiply','grain_extract','overlay','normal'] 
     
-    blend_mode_selected = 0git
+    blend_mode_selected = 0 #default blend mode
     blending_function = getattr(blend_modes, blend_mode_names[blend_mode_selected])
-    blending_alpha = 0.5
+
     show_annotations = True
     show_prediction = True
     
@@ -248,10 +250,6 @@ def interface(input_img, classifier, alpha,mask = None):
     annotation_stack = deque()
     annotation_stack.append(annotation_empty)
     
-    #init 
-    
-    
-    print(features.shape)
     def draw_circle(event,x,y,flags,param):
         if event == cv2.EVENT_LBUTTONDOWN:
             drawing = True
@@ -319,12 +317,6 @@ def interface(input_img, classifier, alpha,mask = None):
 
 
             no_prediction_initialized = False
-       #if no_prediction_initialized == True:
-       #     cv2.imshow('image',output)
-       # else: 
-       #     cv2.addWeighted(output, alpha, prediction3, 1 - alpha,0, dest)
-       #     cv2.imshow('image',dest)
-       
           
         if mode:
             print('\r' + 'Click to label [BACKGROUND]', end='')
@@ -373,9 +365,7 @@ def interface(input_img, classifier, alpha,mask = None):
             #change blend mode
             blend_mode_selected = (blend_mode_selected + 1) % len(blend_mode_names)
             blending_function = getattr(blend_modes, blend_mode_names[blend_mode_selected])
-            print('New blendmode:'+blend_mode_names[blend_mode_selected-1])
-            print()
             
     cv2.destroyAllWindows()
     labels = mask_one_channel 
-    return classifier, mask_one_channel, output, background #return classifier and manual annotations
+    return classifier #return classifier
