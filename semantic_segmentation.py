@@ -223,7 +223,7 @@ def interface(input_img, classifier, blending_alpha = 0.5, mask = None):
     background = np.stack((img8,)*3, axis=-1)
     prediction_img = [] #init as empty
     
-    shapes = [(1024,1024),(512,512),(256,256)]
+    shapes = [(1024,1024),(512,512),(256,256),(128,128)]
     models = init_VGG16_pyramid(shapes)
     features = fd_VGG16_pyramid(input_img,models,shapes)
     
