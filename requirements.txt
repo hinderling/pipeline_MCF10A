@@ -3,7 +3,6 @@ opencv-python
 pandas
 trackpy
 seaborn
-scikit-image
 tqdm
 anytree
 blend-modes
