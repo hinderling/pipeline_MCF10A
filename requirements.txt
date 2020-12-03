@@ -1,0 +1,16 @@
+jupyter
+opencv-python
+pandas
+trackpy
+seaborn
+scikit-image
+tqdm
+anytree
+blend-modes
+tensorflow
+
+# as long as pip version of scikit-image <18.0: use dev version
+# full command for dev-build of scikit-image
+# pip install --pre --extra-index https://pypi.anaconda.org/scipy-wheels-nightly/simple scikit-image
+--extra-index https://pypi.anaconda.org/scipy-wheels-nightly/simple/
+scikit-image --pre
