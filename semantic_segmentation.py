@@ -233,7 +233,7 @@ def interface(input_img, classifier, blending_alpha = 0.5, mask = None):
     #blend_mode_names = ['soft_light','lighten_only','dodge','addition','darken_only','multiply','hard_light','difference','subtract','grain_extract','grain_merge','divide','overlay','normal'] 
     
     #possibly useful blendmodes:
-    blend_mode_names =['soft_light','lighten_only',b'multiply','grain_extract','overlay','normal'] 
+    blend_mode_names =['soft_light','lighten_only','multiply','grain_extract','overlay','normal'] 
     
     blend_mode_selected = 0 #default blend mode
     blending_function = getattr(blend_modes, blend_mode_names[blend_mode_selected])
