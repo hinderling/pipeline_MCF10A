@@ -97,7 +97,7 @@ def apply_feature_extraction(instance_stack,tiff_stack,p_map,channels):
             #mean intensity of cytosolic ring
             mean_ring = labeled_comprehension(tiff_frame[:,:,v], labels = labels_ring, index = range(1, nb_centers+1), func = np.mean, out_dtype = 'float32', default = float("nan"))
             #their ratio
-            ratio = (mean_nuc / mean_ring).astype('float32')
+            ratio = (mean_ring / mean_nuc).astype('float32')
             
             to_zip.append(mean_nuc)
             to_zip.append(mean_ring)
