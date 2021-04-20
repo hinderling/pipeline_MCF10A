@@ -40,7 +40,7 @@ The pipeline is modular, steps can replaced (e.g instead of using the classifier
 ### Setup the environment and install all dependencies: Detailed instructions for Pertzlab
 Connect to the cluster via ssh:
 
-    ssh -X username@izblisbon.unibe.ch
+    ssh -X username@izblisbon.izb.unibe.ch
 
 Move to the main storage partition so you can access the scripts from all nodes:
 
@@ -107,7 +107,7 @@ Next, start a jupyter notebook server by running:
 
 In the output will be an adress and a port number e.g. `localhost:8888`. To connect to the server from your machine, open a new terminal and forward the port:
 
-    ssh -X -L 18888:127.0.0.1:8888 username@izbdelhi.unibe.ch
+    ssh -X -L 18888:127.0.0.1:8888 username@izbdelhi.izb.unibe.ch
 
 Here the port 8888 is forwarded from ther server to 18888 on your machine.
 Next copy the link into your browser, change the port number and you will have access to the jupyter server.
