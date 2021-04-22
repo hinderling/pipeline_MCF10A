@@ -211,15 +211,17 @@ def interface(input_img, classifier, blending_alpha = 0.5, mask = None):
     mode = True
     cv2.destroyAllWindows() #close any windows left 
     
-    #convert 16bit-1channel input image into grayscale uint8 3channel image
-    ## rescale the intensity so we can see more
+    #Adapt the histogram (rescale brightness)
     p2, p98 = np.percentile(input_img, (2, 98))
     img8 = exposure.rescale_intensity(input_img, in_range=(p2, p98))
-    scaler = MinMaxScaler(feature_range=(0, 255))
-    scaler.fit(img8)
-    img8 = scaler.transform(img8)
+    
+    #Scale to range [0-255] and conv to uint8 from 16bit
+    img8 = (img8-np.amin(img8))/(np.amax(img8)-np.amin(img8))
+    img8 = img8*255
     img8 = np.round(img8)
     img8 = img8.astype('uint8')
+    
+    #create 3channel grayscale image
     background = np.stack((img8,)*3, axis=-1)
     prediction_img = [] #init as empty
     
